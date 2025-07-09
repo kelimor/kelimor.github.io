@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Интерактивная диаграмма Смита</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjs@11.6.0/lib/browser/math.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <style>
+        .tooltip {
+            position: absolute;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border-radius: 4px;
+            pointer-events: none;
+            font-size: 12px;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .smith-grid {
+            background-color: #f8fafc;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .wave-animation {
+            animation: wave 2s infinite ease-in-out;
+        }
+        @keyframes wave {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl md:text-4xl font-bold text-indigo-800 mb-2">Интерактивная диаграмма Смита</h1>
+            <p class="text-gray-600 max-w-2xl mx-auto">Визуализация комплексного сопротивления нагрузки, коэффициента отражения и волновых параметров</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Основной график -->
+            <div class="lg:col-span-2 bg-white rounded-xl shadow-md overflow-hidden smith-grid">
+                <div class="p-4 bg-indigo-700 text-white flex justify-between items-center">
+                    <h2 class="text-xl font-semibold">Диаграмма Смита</h2>
+                    <div class="flex space-x-2">
+                        <button id="reset-btn" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 rounded-md text-sm">
+                            <i class="fas fa-sync-alt mr-1"></i> Сброс
+                        </button>
+                        <button id="help-btn" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 rounded-md text-sm">
+                            <i class="fas fa-question-circle mr-1"></i> Помощь
+                        </button>
+                    </div>
+                </div>
+                <div class="p-4">
+                    <div class="relative">
+                        <canvas id="smithChart" width="600" height="600"></canvas>
+                        <div id="tooltip" class="tooltip"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Панель управления -->
+            <div class="space-y-6">
+                <div class="bg-white rounded-xl shadow-md overflow-hidden">
+                    <div class="p-4 bg-indigo-700 text-white">
+                        <h2 class="text-xl font-semibold">Параметры волны</h2>
+                    </div>
+                    <div class="p-4 space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Амплитуда падающей волны (A)</label>
+                            <input type="range" id="amplitudeIncident" min="0" max="1" step="0.01" value="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            <input type="number" id="amplitudeIncidentValue" value="1" step="0.01" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Амплитуда отраженной волны (B)</label>
+                            <input type="range" id="amplitudeReflected" min="0" max="1" step="0.01" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            <input type="number" id="amplitudeReflectedValue" value="0" step="0.01" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Фазовый угол (θ)</label>
+                            <input type="range" id="phaseAngleInput" min="-180" max="180" step="1" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            <div class="flex justify-between text-xs text-gray-500">
+                                <span>-180°</span>
+                                <span>-90°</span>
+                                <span>0°</span>
+                                <span>90°</span>
+                                <span>180°</span>
+                            </div>
+                            <input type="number" id="phaseAngleInputValue" value="0" step="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                        </div>
+
+                        <div class="pt-2">
+                            <button id="random-btn" class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                <i class="fas fa-random mr-2"></i> Случайное значение
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Отображение результатов -->
+                <div class="bg-white rounded-xl shadow-md overflow-hidden">
+                    <div class="p-4 bg-indigo-700 text-white">
+                        <h2 class="text-xl font-semibold">Результаты</h2>
+                    </div>
+                    <div class="p-4 space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-sm font-medium text-gray-700">Нормированное сопротивление:</span>
+                            <span id="normImpedance" class="text-sm font-medium text-indigo-600">1 + j0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-sm font-medium text-gray-700">Коэффициент отражения (Γ):</span>
+                            <span id="reflectionCoeff" class="text-sm font-medium text-indigo-600">0 ∠ 0°</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-sm font-medium text-gray-700">КСВ (SWR):</span>
+                            <span id="swr" class="text-sm font-medium text-indigo-600">1</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-sm font-medium text-gray-700">Фаза отраженной волны:</span>
+                            <span id="phaseAngle" class="text-sm font-medium text-indigo-600">0°</span>
+                        </div>
+                        <div class="pt-2">
+                            <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div id="swrMeter" class="h-full bg-gradient-to-r from-green-400 via-yellow-400 to-red-500" style="width: 10%"></div>
+                            </div>
+                            <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                <span>1</span>
+                                <span>3</span>
+                                <span>5</span>
+                                <span>10</span>
+                                <span>∞</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Визуализация волн -->
+                <div class="bg-white rounded-xl shadow-md overflow-hidden">
+                    <div class="p-4 bg-indigo-700 text-white">
+                        <h2 class="text-xl font-semibold">Волновые параметры</h2>
+                    </div>
+                    <div class="p-4">
+                        <div class="relative h-32 mb-4">
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <div class="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center">
+                                    <div class="w-12 h-12 rounded-full bg-indigo-200 flex items-center justify-center wave-animation">
+                                        <div class="w-8 h-8 rounded-full bg-indigo-300 flex items-center justify-center">
+                                            <i class="fas fa-bolt text-indigo-600"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="incidentWave" class="absolute left-4 top-1/2 transform -translate-y-1/2 w-24 h-1 bg-green-500 rounded-full"></div>
+                            <div id="reflectedWave" class="absolute right-4 top-1/2 transform -translate-y-1/2 w-24 h-1 bg-red-500 rounded-full"></div>
+                            <div class="absolute left-0 bottom-0 text-xs text-green-600">Падающая волна</div>
+                            <div class="absolute right-0 bottom-0 text-xs text-red-600">Отраженная волна</div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-center text-sm">
+                            <div class="bg-green-50 p-2 rounded">
+                                <div class="font-medium text-green-700">Падающая</div>
+                                <div id="incidentPower" class="text-green-600">100%</div>
+                            </div>
+                            <div class="bg-red-50 p-2 rounded">
+                                <div class="font-medium text-red-700">Отраженная</div>
+                                <div id="reflectedPower" class="text-red-600">0%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Теория -->
+        <div class="mt-12 bg-white rounded-xl shadow-md overflow-hidden">
+            <div class="p-4 bg-indigo-700 text-white">
+                <h2 class="text-xl font-semibold">Теория диаграммы Смита</h2>
+            </div>
+            <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h3 class="font-medium text-lg text-indigo-800 mb-2">Что такое диаграмма Смита?</h3>
+                    <p class="text-gray-700 mb-4">
+                        Диаграмма Смита — это графический инструмент для решения задач, связанных с согласованием импедансов в высокочастотных цепях. 
+                        Она позволяет визуализировать комплексные импедансы и коэффициенты отражения.
+                    </p>
+                    <h3 class="font-medium text-lg text-indigo-800 mb-2">Основные элементы</h3>
+                    <ul class="list-disc pl-5 space-y-1 text-gray-700">
+                        <li>Круги постоянного сопротивления (R)</li>
+                        <li>Дуги постоянной реактивности (X)</li>
+                        <li>Коэффициент отражения (Γ) - расстояние от центра</li>
+                        <li>Фазовый угол - угол относительно горизонтали</li>
+                        <li>КСВ (SWR) - круги постоянного КСВ</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="font-medium text-lg text-indigo-800 mb-2">Формулы</h3>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <div class="mb-2">
+                            <span class="font-medium">Коэффициент отражения:</span>
+                            <div class="text-sm font-mono">Γ = (Z<sub>L</sub> - Z<sub>0</sub>) / (Z<sub>L</sub> + Z<sub>0</sub>)</div>
+                        </div>
+                        <div class="mb-2">
+                            <span class="font-medium">КСВ (SWR):</span>
+                            <div class="text-sm font-mono">SWR = (1 + |Γ|) / (1 - |Γ|)</div>
+                        </div>
+                        <div class="mb-2">
+                            <span class="font-medium">Нормированный импеданс:</span>
+                            <div class="text-sm font-mono">z = Z<sub>L</sub> / Z<sub>0</sub> = r + jx</div>
+                        </div>
+                        <div>
+                            <span class="font-medium">Мощность отраженной волны:</span>
+                            <div class="text-sm font-mono">P<sub>ref</sub> = |Γ|<sup>2</sup> × P<sub>inc</sub></div>
+                        </div>
+                    </div>
+                    <div class="mt-4 text-sm text-gray-600">
+                        <p>Z<sub>L</sub> - импеданс нагрузки, Z<sub>0</sub> - характеристическое сопротивление линии</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно помощи -->
+    <div id="help-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-2xl font-bold text-indigo-800">Помощь по диаграмме Смита</h3>
+                    <button id="close-help" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="space-y-4 text-gray-700">
+                    <p>
+                        Диаграмма Смита — это мощный инструмент для анализа и проектирования высокочастотных цепей. 
+                        Она позволяет визуализировать комплексные импедансы и коэффициенты отражения в нормированном виде.
+                    </p>
+                    
+                    <h4 class="font-semibold text-lg text-indigo-700">Как пользоваться:</h4>
+                    <ul class="list-disc pl-5 space-y-2">
+                        <li>Используйте ползунки или введите значения вручную для задания реальной (R) и мнимой (X) частей нормированного импеданса</li>
+                        <li>Точка на диаграмме показывает положение импеданса</li>
+                        <li>Расстояние от центра до точки соответствует модулю коэффициента отражения (0 в центре, 1 на окружности)</li>
+                        <li>Угол относительно горизонтали показывает фазу коэффициента отражения</li>
+                        <li>Круги, пересекающие точку, показывают постоянное сопротивление и реактивность</li>
+                    </ul>
+                    
+                    <h4 class="font-semibold text-lg text-indigo-700">Интерпретация результатов:</h4>
+                    <ul class="list-disc pl-5 space-y-2">
+                        <li><span class="font-medium">Коэффициент отражения (Γ):</span> Чем ближе к 0, тем лучше согласование</li>
+                        <li><span class="font-medium">КСВ (SWR):</span> 1 - идеальное согласование, >1 - рассогласование</li>
+                        <li><span class="font-medium">Мощность отраженной волны:</span> Показывает потери из-за рассогласования</li>
+                    </ul>
+                    
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                        <h4 class="font-semibold text-blue-800 flex items-center">
+                            <i class="fas fa-lightbulb mr-2"></i> Совет
+                        </h4>
+                        <p>
+                            Для идеального согласования (нулевого отражения) задайте нормированное сопротивление 1 + j0.
+                            Чисто реактивная нагрузка (R=0) всегда находится на окружности диаграммы (|Γ|=1).
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Инициализация элементов управления
+            const amplitudeIncidentSlider = document.getElementById('amplitudeIncident');
+            const amplitudeReflectedSlider = document.getElementById('amplitudeReflected');
+            const phaseAngleSlider = document.getElementById('phaseAngleInput');
+            const amplitudeIncidentValue = document.getElementById('amplitudeIncidentValue');
+            const amplitudeReflectedValue = document.getElementById('amplitudeReflectedValue');
+            const phaseAngleValue = document.getElementById('phaseAngleInputValue');
+            const randomBtn = document.getElementById('random-btn');
+            const resetBtn = document.getElementById('reset-btn');
+            const helpBtn = document.getElementById('help-btn');
+            const closeHelp = document.getElementById('close-help');
+            const helpModal = document.getElementById('help-modal');
+            const tooltip = document.getElementById('tooltip');
+            
+            // Элементы для отображения результатов
+            const normImpedance = document.getElementById('normImpedance');
+            const reflectionCoeff = document.getElementById('reflectionCoeff');
+            const swr = document.getElementById('swr');
+            const phaseAngle = document.getElementById('phaseAngle');
+            const swrMeter = document.getElementById('swrMeter');
+            const incidentPower = document.getElementById('incidentPower');
+            const reflectedPower = document.getElementById('reflectedPower');
+            const incidentWave = document.getElementById('incidentWave');
+            const reflectedWave = document.getElementById('reflectedWave');
+
+            // Связывание ползунков и полей ввода
+            amplitudeIncidentSlider.addEventListener('input', function() {
+                amplitudeIncidentValue.value = this.value;
+                updateChart();
+            });
+            
+            amplitudeReflectedSlider.addEventListener('input', function() {
+                amplitudeReflectedValue.value = this.value;
+                updateChart();
+            });
+            
+            phaseAngleSlider.addEventListener('input', function() {
+                phaseAngleValue.value = this.value;
+                updateChart();
+            });
+            
+            amplitudeIncidentValue.addEventListener('input', function() {
+                amplitudeIncidentSlider.value = this.value;
+                updateChart();
+            });
+            
+            amplitudeReflectedValue.addEventListener('input', function() {
+                amplitudeReflectedSlider.value = this.value;
+                updateChart();
+            });
+            
+            phaseAngleValue.addEventListener('input', function() {
+                phaseAngleSlider.value = this.value;
+                updateChart();
+            });
+
+            // Кнопка случайного значения
+            randomBtn.addEventListener('click', function() {
+                const randomA = Math.random().toFixed(2);
+                const randomB = Math.random().toFixed(2);
+                const randomPhase = (Math.random() * 360 - 180).toFixed(0);
+                
+                amplitudeIncidentSlider.value = randomA;
+                amplitudeIncidentValue.value = randomA;
+                amplitudeReflectedSlider.value = randomB;
+                amplitudeReflectedValue.value = randomB;
+                phaseAngleSlider.value = randomPhase;
+                phaseAngleValue.value = randomPhase;
+                
+                updateChart();
+            });
+
+            // Кнопка сброса
+            resetBtn.addEventListener('click', function() {
+                amplitudeIncidentSlider.value = 1;
+                amplitudeIncidentValue.value = 1;
+                amplitudeReflectedSlider.value = 0;
+                amplitudeReflectedValue.value = 0;
+                phaseAngleSlider.value = 0;
+                phaseAngleValue.value = 0;
+                
+                updateChart();
+            });
+
+            // Кнопка помощи
+            helpBtn.addEventListener('click', function() {
+                helpModal.classList.remove('hidden');
+            });
+            
+            closeHelp.addEventListener('click', function() {
+                helpModal.classList.add('hidden');
+            });
+
+            // Создание диаграммы Смита
+            const ctx = document.getElementById('smithChart').getContext('2d');
+            let smithChart = new Chart(ctx, {
+                type: 'scatter',
+                plugins: [{
+                    id: 'smithChartDrawer',
+                    beforeDraw: function(chart) {
+                        drawSmithChart();
+                    }
+                }],
+                data: {
+                    datasets: [{
+                        label: 'Импеданс',
+                        data: [{x: 0, y: 0}],
+                        pointRadius: 10,
+                        pointBackgroundColor: 'rgba(99, 102, 241, 1)',
+                        pointBorderColor: 'rgba(255, 255, 255, 1)',
+                        pointBorderWidth: 3,
+                        pointHoverRadius: 12,
+                        pointHoverBorderWidth: 3
+                    }]
+                },
+                options: {
+                    responsive: false,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'center',
+                            min: -1.2,
+                            max: 1.2,
+                            ticks: {
+                                display: false
+                            },
+                            grid: {
+                                display: false,
+                                drawBorder: false
+                            }
+                        },
+                        y: {
+                            type: 'linear',
+                            position: 'center',
+                            min: -1.2,
+                            max: 1.2,
+                            ticks: {
+                                display: false
+                            },
+                            grid: {
+                                display: false,
+                                drawBorder: false
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            enabled: false
+                        }
+                    },
+                    onClick: function(e) {
+                        const canvasPosition = Chart.helpers.getRelativePosition(e, smithChart);
+                        const x = smithChart.scales.x.getValueForPixel(canvasPosition.x);
+                        const y = smithChart.scales.y.getValueForPixel(canvasPosition.y);
+                        
+                        // Преобразование из Γ в Z
+                        const gamma = math.complex(x, y);
+                        const z = math.divide(
+                            math.add(1, gamma),
+                            math.subtract(1, gamma)
+                        );
+                        
+                        const r = math.re(z);
+                        const xVal = math.im(z);
+                        
+                        realPartSlider.value = r.toFixed(2);
+                        realPartValue.value = r.toFixed(2);
+                        imagPartSlider.value = xVal.toFixed(2);
+                        imagPartValue.value = xVal.toFixed(2);
+                        
+                        updateChart();
+                    }
+                }
+            });
+
+            // Рисование диаграммы Смита
+            function drawSmithChart() {
+                const chart = smithChart;
+                const ctx = chart.ctx;
+                const xAxis = chart.scales.x;
+                const yAxis = chart.scales.y;
+                
+                // Очистка
+                ctx.save();
+                ctx.clearRect(0, 0, chart.width, chart.height);
+                
+                // Основной круг
+                ctx.beginPath();
+                ctx.arc(
+                    xAxis.getPixelForValue(0), 
+                    yAxis.getPixelForValue(0), 
+                    xAxis.getPixelForValue(1) - xAxis.getPixelForValue(0), 
+                    0, 
+                    2 * Math.PI
+                );
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // 50 Ohm reference point (normalized to 1)
+                ctx.beginPath();
+                ctx.arc(
+                    xAxis.getPixelForValue(0), 
+                    yAxis.getPixelForValue(0), 
+                    4, 
+                    0, 
+                    2 * Math.PI
+                );
+                ctx.fillStyle = 'rgba(0, 200, 0, 0.7)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(0, 150, 0, 1)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Reference lines
+                ctx.beginPath();
+                ctx.moveTo(xAxis.getPixelForValue(-1.2), yAxis.getPixelForValue(0));
+                ctx.lineTo(xAxis.getPixelForValue(1.2), yAxis.getPixelForValue(0));
+                ctx.moveTo(xAxis.getPixelForValue(0), yAxis.getPixelForValue(-1.2));
+                ctx.lineTo(xAxis.getPixelForValue(0), yAxis.getPixelForValue(1.2));
+                ctx.strokeStyle = 'rgba(200, 200, 200, 0.5)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                
+                // Горизонтальная линия
+                ctx.beginPath();
+                ctx.moveTo(xAxis.getPixelForValue(-1), yAxis.getPixelForValue(0));
+                ctx.lineTo(xAxis.getPixelForValue(1), yAxis.getPixelForValue(0));
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                
+                // Круги постоянного сопротивления
+                const rValues = [0, 0.2, 0.5, 1, 2, 5];
+                rValues.forEach(r => {
+                    if (r === 0) return;
+                    
+                    const center = r / (1 + r);
+                    const radius = 1 / (1 + r);
+                    
+                    ctx.beginPath();
+                    ctx.arc(
+                        xAxis.getPixelForValue(center), 
+                        yAxis.getPixelForValue(0), 
+                        (xAxis.getPixelForValue(radius) - xAxis.getPixelForValue(0)), 
+                        0, 
+                        2 * Math.PI
+                    );
+                    ctx.strokeStyle = 'rgba(75, 192, 192, 0.8)';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    
+                    // Подписи для R
+                    if (r <= 1) {
+                        ctx.fillStyle = 'rgba(75, 192, 192, 0.8)';
+                        ctx.font = '10px Arial';
+                        ctx.fillText(
+                            'R=' + r, 
+                            xAxis.getPixelForValue(center + radius + 0.05), 
+                            yAxis.getPixelForValue(0.05)
+                        );
+                    }
+                });
+                
+                // Дуги постоянной реактивности
+                const xValues = [0.2, 0.5, 1, 2, 5];
+                xValues.forEach(x => {
+                    const center = 1;
+                    const radius = 1 / x;
+                    
+                    // Верхние дуги
+                    ctx.beginPath();
+                    ctx.arc(
+                        xAxis.getPixelForValue(center), 
+                        yAxis.getPixelForValue(radius), 
+                        (xAxis.getPixelForValue(radius) - xAxis.getPixelForValue(0)), 
+                        -Math.PI/2, 
+                        0
+                    );
+                    ctx.strokeStyle = 'rgba(255, 159, 64, 0.8)';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    
+                    // Подписи для верхних X
+                    ctx.fillStyle = 'rgba(255, 159, 64, 0.8)';
+                    ctx.font = '10px Arial';
+                    ctx.fillText(
+                        'X=' + x, 
+                        xAxis.getPixelForValue(1.05), 
+                        yAxis.getPixelForValue(radius - 0.05)
+                    );
+                    
+                    // Нижние дуги
+                    ctx.beginPath();
+                    ctx.arc(
+                        xAxis.getPixelForValue(center), 
+                        yAxis.getPixelForValue(-radius), 
+                        (xAxis.getPixelForValue(radius) - xAxis.getPixelForValue(0)), 
+                        0, 
+                        Math.PI/2
+                    );
+                    ctx.strokeStyle = 'rgba(255, 159, 64, 0.5)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    
+                    // Подписи для нижних X
+                    ctx.fillStyle = 'rgba(255, 159, 64, 0.8)';
+                    ctx.font = '10px Arial';
+                    ctx.fillText(
+                        'X=-' + x, 
+                        xAxis.getPixelForValue(1.05), 
+                        yAxis.getPixelForValue(-radius + 0.05)
+                    );
+                });
+                
+                // Круги постоянного КСВ
+                const swrValues = [1.5, 2, 3, 5];
+                swrValues.forEach(swrVal => {
+                    const gamma = (swrVal - 1) / (swrVal + 1);
+                    const radius = gamma;
+                    
+                    ctx.beginPath();
+                    ctx.arc(
+                        xAxis.getPixelForValue(0), 
+                        yAxis.getPixelForValue(0), 
+                        (xAxis.getPixelForValue(radius) - xAxis.getPixelForValue(0)), 
+                        0, 
+                        2 * Math.PI
+                    );
+                    ctx.strokeStyle = 'rgba(153, 102, 255, 0.3)';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([5, 3]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    
+                    // Подписи для КСВ
+                    ctx.fillStyle = 'rgba(153, 102, 255, 0.6)';
+                    ctx.font = '10px Arial';
+                    ctx.fillText(
+                        'КСВ=' + swrVal, 
+                        xAxis.getPixelForValue(radius * Math.cos(Math.PI/4) - 0.1), 
+                        yAxis.getPixelForValue(radius * Math.sin(Math.PI/4) + 0.05)
+                    );
+                });
+                
+                ctx.restore();
+            }
+            
+            // Обновление диаграммы
+            function updateChart() {
+                const A = parseFloat(amplitudeIncidentValue.value);
+                const B = parseFloat(amplitudeReflectedValue.value);
+                const theta = parseFloat(phaseAngleValue.value) * Math.PI / 180;
+                
+                // Рассчет коэффициента отражения
+                const gammaMag = A > 0 ? B / A : 0;
+                const gammaPhase = theta;
+                
+                // Преобразование в декартовы координаты
+                const gammaReal = gammaMag * Math.cos(gammaPhase);
+                const gammaImag = gammaMag * Math.sin(gammaPhase);
+                
+                // Рассчет импеданса из коэффициента отражения
+                const gamma = math.complex(gammaReal, gammaImag);
+                const z = math.divide(
+                    math.add(1, gamma),
+                    math.subtract(1, gamma)
+                );
+                
+                const r = math.re(z);
+                const x = math.im(z);
+                
+                // Рассчет КСВ
+                const swrValue = gammaMag >= 1 ? Infinity : (1 + gammaMag) / (1 - gammaMag);
+                
+                // Обновление точки на диаграмме
+                smithChart.data.datasets[0].data = [{
+                    x: gammaReal,
+                    y: gammaImag
+                }];
+                smithChart.update();
+
+                // Draw line from center to point
+                const chart = smithChart;
+                const ctx = chart.ctx;
+                const xAxis = chart.scales.x;
+                const yAxis = chart.scales.y;
+                
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(
+                    xAxis.getPixelForValue(0),
+                    yAxis.getPixelForValue(0)
+                );
+                ctx.lineTo(
+                    xAxis.getPixelForValue(gammaReal),
+                    yAxis.getPixelForValue(gammaImag)
+                );
+                ctx.strokeStyle = 'rgba(99, 102, 241, 0.5)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 3]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+                
+                // Обновление информации
+                normImpedance.textContent = r.toFixed(2) + (x >= 0 ? ' + j' : ' - j') + Math.abs(x).toFixed(2);
+                reflectionCoeff.textContent = gammaMag.toFixed(3) + ' ∠ ' + (theta * 180 / Math.PI).toFixed(1) + '°';
+                phaseAngle.textContent = (theta * 180 / Math.PI).toFixed(1) + '°';
+                
+                if (isFinite(swrValue)) {
+                    swr.textContent = swrValue.toFixed(2);
+                } else {
+                    swr.textContent = '∞';
+                }
+                
+                // Обновление индикатора КСВ
+                const swrPercent = Math.min(100, 10 + 90 * (Math.log10(swrValue) / 2)); // Логарифмическая шкала
+                swrMeter.style.width = swrPercent + '%';
+                
+                // Обновление мощности волн
+                const reflectedPercent = (gammaMag * gammaMag * 100).toFixed(1);
+                const incidentPercent = (100 - reflectedPercent).toFixed(1);
+                
+                reflectedPower.textContent = reflectedPercent + '%';
+                incidentPower.textContent = incidentPercent + '%';
+                
+                // Анимация волн
+                reflectedWave.style.width = (gammaMag * 100) + '%';
+                reflectedWave.style.opacity = gammaMag;
+                
+                // Перерисовка
+                smithChart.update();
+                
+                // Показать подсказку при наведении на точку
+                const point = smithChart.getDatasetMeta(0).data[0];
+                const canvas = smithChart.canvas;
+                
+                canvas.addEventListener('mousemove', function(e) {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    if (point.inRange(x, y)) {
+                        tooltip.style.opacity = 1;
+                        tooltip.style.left = (e.clientX + 10) + 'px';
+                        tooltip.style.top = (e.clientY + 10) + 'px';
+                        
+                        tooltip.innerHTML = `
+                            <div class="font-bold mb-1">Параметры нагрузки</div>
+                            <div>Нормированный Z = ${r.toFixed(2)} + j${x.toFixed(2)}</div>
+                            <div>Фактический Z = ${(r*50).toFixed(1)} + j${(x*50).toFixed(1)} Ом</div>
+                            <div>Γ = ${gammaMag.toFixed(3)} ∠ ${gammaPhase.toFixed(1)}°</div>
+                            <div>КСВ = ${isFinite(swrValue) ? swrValue.toFixed(2) : '∞'}</div>
+                            <div class="mt-1 text-xs">Зелёная точка - 50 Ом (Z=1)</div>
+                        `;
+                    } else {
+                        tooltip.style.opacity = 0;
+                    }
+                });
+                
+                canvas.addEventListener('mouseout', function() {
+                    tooltip.style.opacity = 0;
+                });
+            }
+            
+            // Инициализация
+            drawSmithChart();
+            updateChart();
+        });
+    </script>
+</body>
+</html>
